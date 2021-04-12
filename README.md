@@ -4,14 +4,14 @@
 <head>
 <script>
 function startTime() {
-  var today = new Date();
-  var h = today.getHours();
-  var m = today.getMinutes();
-  var s = today.getSeconds();
-  m = checkTime(m);
-  s = checkTime(s);
+  var day = new Date();
+  var hour = day.getHours();
+  var minute = day.getMinutes();
+  var second = day.getSeconds();
+  minute = checkTime(minute);
+  second = checkTime(second);
   document.getElementById('txt').innerHTML =
-  h + ":" + m + ":" + s;
+  hour + ":" + minute + ":" + second;
   var t = setTimeout(startTime, 500);
 }
 function checkTime(i) {
