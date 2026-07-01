@@ -1,29 +1,37 @@
-# dautkorsaya
-<!DOCTYPE html>
-<html>
-<head>
-<script>
-function startTime() {
-  var day = new Date();
-  var hour = day.getHours();
-  var minute = day.getMinutes();
-  var second = day.getSeconds();
-  minute = checkTime(minute);
-  second = checkTime(second);
-  document.getElementById('txt').innerHTML =
-  hour + ":" + minute + ":" + second;
-  var t = setTimeout(startTime, 500);
-}
-function checkTime(i) {
-  if (i < 10) {i = "0" + i};  // add zero in front of numbers < 10
-  return i;
-}
-</script>
-</head>
+# dautkorsaya — Telegram video note bot
 
-<body onload="startTime()">
+Telegram-бот на aiogram, который принимает видео и возвращает его в виде
+video note (кружочка).
 
-<div id="txt"></div>
+## Возможности
 
-</body>
-</html>
+* Принимает видео (`video`) и видеофайлы, отправленные как документ (`document`)
+* Конвертирует через FFmpeg в квадрат 480×480 с обрезкой по центру
+* Отправляет результат через `sendVideoNote`
+* Удаляет временные файлы после обработки
+* Обрабатывает ошибки скачивания/конвертации/отправки, не роняя бота
+
+## Требования
+
+* Python 3.10+
+* Установленный в системе `ffmpeg`
+
+## Установка и запуск
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+cp .env.example .env
+# впишите в .env токен бота, полученный у @BotFather
+
+python bot.py
+```
+
+## Структура
+
+* `bot.py` — точка входа, запуск polling
+* `config.py` — конфигурация (токен, лимиты)
+* `handlers.py` — обработчики сообщений (скачивание, конвертация, отправка)
+* `converter.py` — обёртка над FFmpeg (crop + scale в квадрат)
