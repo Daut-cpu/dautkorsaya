@@ -29,9 +29,22 @@ cp .env.example .env
 python bot.py
 ```
 
+## Запуск через Docker
+
+FFmpeg уже встроен в образ — на хосте ничего дополнительно ставить не нужно.
+
+```bash
+cp .env.example .env
+# впишите в .env токен бота, полученный у @BotFather
+
+docker build -t video-note-bot .
+docker run --rm --env-file .env video-note-bot
+```
+
 ## Структура
 
 * `bot.py` — точка входа, запуск polling
 * `config.py` — конфигурация (токен, лимиты)
 * `handlers.py` — обработчики сообщений (скачивание, конвертация, отправка)
 * `converter.py` — обёртка над FFmpeg (crop + scale в квадрат)
+* `Dockerfile` — образ с Python и FFmpeg для деплоя без ручной установки зависимостей
