@@ -21,6 +21,7 @@ SUPPORTED_HOSTS = (
     "youtube.com",
     "youtu.be",
     "tiktok.com",
+    "m24.ru",
 )
 
 _URL_HOST_RE = re.compile(r"^https?://([^/]+)/?", re.IGNORECASE)
