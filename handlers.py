@@ -7,7 +7,7 @@ import time
 import uuid
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import FSInputFile, Message
@@ -32,26 +32,43 @@ router = Router()
 async def _safe_edit(status: Message, text: str) -> None:
     """Edit the status message, falling back to a new reply if Telegram refuses the edit.
 
-    Telegram can reject edit_text for reasons outside our control (the
-    message was deleted, too much time passed, etc.) -- when that happens we
-    still want the user to see the final result instead of an unhandled
-    exception.
+    Covers both API-level rejections (e.g. "message can't be edited" if it
+    was deleted or too much time passed) and transient network errors --
+    either way we still want the user to see the final result instead of an
+    unhandled exception.
     """
     try:
         await status.edit_text(text)
-    except TelegramBadRequest:
+    except TelegramAPIError:
         logger.warning("Could not edit status message, sending a new one instead")
         try:
             await status.answer(text)
-        except TelegramBadRequest:
+        except TelegramAPIError:
             logger.exception("Could not send fallback status message either")
 
 
 async def _safe_delete(status: Message) -> None:
     try:
         await status.delete()
-    except TelegramBadRequest:
+    except TelegramAPIError:
         pass
+
+
+async def _send_with_retry(send, attempts: int = 3, delay_seconds: float = 3.0):
+    """Retry a Telegram send call a couple of times before giving up.
+
+    The result (converted/downloaded video) is expensive to produce, so a
+    one-off network blip at the very last step (like a dropped connection to
+    api.telegram.org) shouldn't throw it away.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            return await send()
+        except TelegramAPIError:
+            if attempt == attempts:
+                raise
+            logger.warning("Send attempt %d/%d failed, retrying...", attempt, attempts)
+            await asyncio.sleep(delay_seconds)
 
 
 @router.message(CommandStart())
@@ -106,7 +123,7 @@ async def _download_with_progress(url: str, work_dir: str, status: Message) -> s
             elapsed = int(time.monotonic() - started)
             try:
                 await status.edit_text(f"⏳ Скачиваю видео по ссылке... ({elapsed}с)")
-            except TelegramBadRequest:
+            except TelegramAPIError:
                 pass
 
 
@@ -137,7 +154,7 @@ async def handle_link(message: Message, state: FSMContext) -> None:
             return
 
         try:
-            await message.reply_video(FSInputFile(video_path))
+            await _send_with_retry(lambda: message.reply_video(FSInputFile(video_path)))
         except Exception:
             logger.exception("Failed to send downloaded video from %s", url)
             await _safe_edit(status, "❌ Видео скачано, но не отправилось (возможно, слишком большое).")
@@ -180,7 +197,7 @@ async def _process_video(message: Message, bot: Bot, file_id: str, file_size: in
             return
 
         try:
-            await message.reply_video_note(FSInputFile(output_path))
+            await _send_with_retry(lambda: message.reply_video_note(FSInputFile(output_path)))
         except Exception:
             logger.exception("Failed to send video note for %s", file_id)
             await _safe_edit(status, "❌ Видео сконвертировано, но не отправилось.")
