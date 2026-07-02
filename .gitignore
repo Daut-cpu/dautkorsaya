@@ -6,3 +6,4 @@ venv/
 *.log
 tmp/
 cookies.txt
+.idea/
