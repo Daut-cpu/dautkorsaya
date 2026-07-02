@@ -13,7 +13,7 @@ from aiogram.types import FSInputFile, Message
 
 from config import DOWNLOAD_TIMEOUT_SECONDS, MAX_DOWNLOAD_SIZE_BYTES
 from converter import ConversionError, convert_to_video_note, ffmpeg_available
-from downloader import DownloadError, download_video, is_supported_link
+from downloader import DownloadError, download_video, is_supported_link, normalize_url
 from keyboards import BTN_CANCEL, BTN_DOWNLOAD_LINK, BTN_VIDEO_NOTE, cancel_menu, main_menu
 from states import DownloadLink
 
@@ -77,7 +77,7 @@ async def _download_with_progress(url: str, work_dir: str, status: Message) -> s
 
 @router.message(DownloadLink.waiting_for_url, F.text)
 async def handle_link(message: Message, state: FSMContext) -> None:
-    url = message.text.strip()
+    url = normalize_url(message.text)
     if not is_supported_link(url):
         await message.reply(
             "Это не похоже на ссылку из Instagram или Facebook. "

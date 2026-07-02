@@ -19,14 +19,22 @@ SUPPORTED_HOSTS = (
 )
 
 _URL_HOST_RE = re.compile(r"^https?://([^/]+)/?", re.IGNORECASE)
+_SCHEME_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
 class DownloadError(Exception):
     """Raised when a video can't be fetched from the given link."""
 
 
+def normalize_url(url: str) -> str:
+    url = url.strip()
+    if not _SCHEME_RE.match(url):
+        url = f"https://{url}"
+    return url
+
+
 def is_supported_link(url: str) -> bool:
-    match = _URL_HOST_RE.match(url.strip())
+    match = _URL_HOST_RE.match(normalize_url(url))
     if not match:
         return False
     host = match.group(1).lower()
