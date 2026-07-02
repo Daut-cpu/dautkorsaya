@@ -7,6 +7,7 @@ import signal
 from config import (
     DOWNLOAD_TIMEOUT_SECONDS,
     MAX_UPLOAD_SIZE_BYTES,
+    YTDLP_COOKIES_FILE,
     YTDLP_MAX_HEIGHT,
     YTDLP_RETRIES,
     YTDLP_SOCKET_TIMEOUT_SECONDS,
@@ -75,7 +76,7 @@ async def download_video(url: str, work_dir: str) -> str:
         f"best[height<={height}]/best"
     )
 
-    process = await asyncio.create_subprocess_exec(
+    args = [
         "yt-dlp",
         "--no-playlist",
         "--quiet",
@@ -89,7 +90,13 @@ async def download_video(url: str, work_dir: str) -> str:
         "--concurrent-fragments", "4",
         "--print", "after_move:filepath",
         "-o", os.path.join(work_dir, "%(id)s.%(ext)s"),
-        url,
+    ]
+    if YTDLP_COOKIES_FILE and os.path.isfile(YTDLP_COOKIES_FILE):
+        args += ["--cookies", YTDLP_COOKIES_FILE]
+    args.append(url)
+
+    process = await asyncio.create_subprocess_exec(
+        *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         # New session/process group so we can kill yt-dlp *and* any child it
