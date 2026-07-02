@@ -11,9 +11,15 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import FSInputFile, Message
 
-from config import DOWNLOAD_TIMEOUT_SECONDS, MAX_DOWNLOAD_SIZE_BYTES
+from config import MAX_DOWNLOAD_SIZE_BYTES
 from converter import ConversionError, convert_to_video_note, ffmpeg_available
-from downloader import DownloadError, download_video, is_supported_link, normalize_url
+from downloader import (
+    DownloadError,
+    download_video,
+    is_supported_link,
+    normalize_url,
+    yt_dlp_available,
+)
 from keyboards import BTN_CANCEL, BTN_DOWNLOAD_LINK, BTN_VIDEO_NOTE, cancel_menu, main_menu
 from states import DownloadLink
 
@@ -58,6 +64,12 @@ async def cancel_action(message: Message, state: FSMContext) -> None:
 
 
 async def _download_with_progress(url: str, work_dir: str, status: Message) -> str:
+    """Await the download while periodically reassuring the user it's still running.
+
+    download_video() guarantees termination (success or DownloadError) within
+    DOWNLOAD_TIMEOUT_SECONDS, since it kills the yt-dlp subprocess on timeout
+    instead of relying on cooperative cancellation.
+    """
     task = asyncio.ensure_future(download_video(url, work_dir))
     started = time.monotonic()
 
@@ -66,9 +78,6 @@ async def _download_with_progress(url: str, work_dir: str, status: Message) -> s
             return await asyncio.wait_for(asyncio.shield(task), timeout=7)
         except asyncio.TimeoutError:
             elapsed = int(time.monotonic() - started)
-            if elapsed >= DOWNLOAD_TIMEOUT_SECONDS:
-                task.cancel()
-                raise DownloadError("download timed out")
             try:
                 await status.edit_text(f"⏳ Скачиваю видео по ссылке... ({elapsed}с)")
             except Exception:
@@ -77,6 +86,10 @@ async def _download_with_progress(url: str, work_dir: str, status: Message) -> s
 
 @router.message(DownloadLink.waiting_for_url, F.text)
 async def handle_link(message: Message, state: FSMContext) -> None:
+    if not yt_dlp_available():
+        await message.reply("❌ yt-dlp не установлен на сервере, скачивание недоступно.")
+        return
+
     url = normalize_url(message.text)
     if not is_supported_link(url):
         await message.reply(

@@ -1,10 +1,11 @@
 import asyncio
 import os
 import re
-
-import yt_dlp
+import shutil
+import signal
 
 from config import (
+    DOWNLOAD_TIMEOUT_SECONDS,
     MAX_UPLOAD_SIZE_BYTES,
     YTDLP_MAX_HEIGHT,
     YTDLP_RETRIES,
@@ -45,37 +46,74 @@ def is_supported_link(url: str) -> bool:
     return any(host == h or host.endswith("." + h) for h in SUPPORTED_HOSTS)
 
 
-def _download(url: str, work_dir: str) -> str:
-    height = YTDLP_MAX_HEIGHT
-    ydl_opts = {
-        "outtmpl": os.path.join(work_dir, "%(id)s.%(ext)s"),
-        "format": (
-            f"best[height<={height}][ext=mp4]/"
-            f"bestvideo[height<={height}]+bestaudio/"
-            f"best[height<={height}]/best"
-        ),
-        "merge_output_format": "mp4",
-        "noplaylist": True,
-        "max_filesize": MAX_UPLOAD_SIZE_BYTES,
-        "socket_timeout": YTDLP_SOCKET_TIMEOUT_SECONDS,
-        "retries": YTDLP_RETRIES,
-        "fragment_retries": YTDLP_RETRIES,
-        "concurrent_fragment_downloads": 4,
-        "quiet": True,
-        "no_warnings": True,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        path = ydl.prepare_filename(info)
-        if not os.path.exists(path):
-            raise DownloadError("downloaded file not found on disk")
-        return path
+def yt_dlp_available() -> bool:
+    return shutil.which("yt-dlp") is not None
+
+
+async def _kill_process_group(process: asyncio.subprocess.Process) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        await asyncio.wait_for(process.wait(), timeout=5)
+    except asyncio.TimeoutError:
+        # The OS didn't report the reap in time; don't hang the caller over it.
+        pass
 
 
 async def download_video(url: str, work_dir: str) -> str:
+    """Run yt-dlp as a subprocess so a stuck download can always be killed outright.
+
+    (The in-process Python API would run inside a thread pool worker that
+    Python cannot forcibly stop if it hangs, eventually starving the pool.)
+    """
+    height = YTDLP_MAX_HEIGHT
+    fmt = (
+        f"best[height<={height}][ext=mp4]/"
+        f"bestvideo[height<={height}]+bestaudio/"
+        f"best[height<={height}]/best"
+    )
+
+    process = await asyncio.create_subprocess_exec(
+        "yt-dlp",
+        "--no-playlist",
+        "--quiet",
+        "--no-warnings",
+        "--format", fmt,
+        "--merge-output-format", "mp4",
+        "--max-filesize", str(MAX_UPLOAD_SIZE_BYTES),
+        "--socket-timeout", str(YTDLP_SOCKET_TIMEOUT_SECONDS),
+        "--retries", str(YTDLP_RETRIES),
+        "--fragment-retries", str(YTDLP_RETRIES),
+        "--concurrent-fragments", "4",
+        "--print", "after_move:filepath",
+        "-o", os.path.join(work_dir, "%(id)s.%(ext)s"),
+        url,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        # New session/process group so we can kill yt-dlp *and* any child it
+        # spawns (e.g. ffmpeg for merging) instead of just the immediate PID.
+        start_new_session=True,
+    )
+
     try:
-        return await asyncio.to_thread(_download, url, work_dir)
-    except DownloadError:
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=DOWNLOAD_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError as exc:
+            await _kill_process_group(process)
+            raise DownloadError("download timed out") from exc
+    except asyncio.CancelledError:
+        await _kill_process_group(process)
         raise
-    except yt_dlp.utils.DownloadError as exc:
-        raise DownloadError(str(exc)) from exc
+
+    if process.returncode != 0:
+        raise DownloadError(stderr.decode(errors="ignore")[-2000:])
+
+    lines = stdout.decode(errors="ignore").strip().splitlines()
+    path = lines[-1] if lines else ""
+    if not path or not os.path.exists(path):
+        raise DownloadError("downloaded file not found on disk")
+    return path
