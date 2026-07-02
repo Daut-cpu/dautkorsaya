@@ -7,6 +7,7 @@ import time
 import uuid
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import FSInputFile, Message
@@ -26,6 +27,31 @@ from states import DownloadLink
 logger = logging.getLogger(__name__)
 
 router = Router()
+
+
+async def _safe_edit(status: Message, text: str) -> None:
+    """Edit the status message, falling back to a new reply if Telegram refuses the edit.
+
+    Telegram can reject edit_text for reasons outside our control (the
+    message was deleted, too much time passed, etc.) -- when that happens we
+    still want the user to see the final result instead of an unhandled
+    exception.
+    """
+    try:
+        await status.edit_text(text)
+    except TelegramBadRequest:
+        logger.warning("Could not edit status message, sending a new one instead")
+        try:
+            await status.answer(text)
+        except TelegramBadRequest:
+            logger.exception("Could not send fallback status message either")
+
+
+async def _safe_delete(status: Message) -> None:
+    try:
+        await status.delete()
+    except TelegramBadRequest:
+        pass
 
 
 @router.message(CommandStart())
@@ -80,7 +106,7 @@ async def _download_with_progress(url: str, work_dir: str, status: Message) -> s
             elapsed = int(time.monotonic() - started)
             try:
                 await status.edit_text(f"⏳ Скачиваю видео по ссылке... ({elapsed}с)")
-            except Exception:
+            except TelegramBadRequest:
                 pass
 
 
@@ -107,17 +133,17 @@ async def handle_link(message: Message, state: FSMContext) -> None:
             video_path = await _download_with_progress(url, work_dir, status)
         except DownloadError:
             logger.exception("Failed to download video from %s", url)
-            await status.edit_text("❌ Не удалось скачать видео по этой ссылке.")
+            await _safe_edit(status, "❌ Не удалось скачать видео по этой ссылке.")
             return
 
         try:
             await message.reply_video(FSInputFile(video_path))
         except Exception:
             logger.exception("Failed to send downloaded video from %s", url)
-            await status.edit_text("❌ Видео скачано, но не отправилось (возможно, слишком большое).")
+            await _safe_edit(status, "❌ Видео скачано, но не отправилось (возможно, слишком большое).")
             return
 
-        await status.delete()
+        await _safe_delete(status)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -143,24 +169,24 @@ async def _process_video(message: Message, bot: Bot, file_id: str, file_size: in
             await bot.download_file(tg_file.file_path, destination=input_path)
         except Exception:
             logger.exception("Failed to download file %s", file_id)
-            await status.edit_text("❌ Не удалось скачать видео из Telegram.")
+            await _safe_edit(status, "❌ Не удалось скачать видео из Telegram.")
             return
 
         try:
             await convert_to_video_note(input_path, output_path)
         except ConversionError:
             logger.exception("ffmpeg failed to convert %s", file_id)
-            await status.edit_text("❌ Не получилось сконвертировать это видео.")
+            await _safe_edit(status, "❌ Не получилось сконвертировать это видео.")
             return
 
         try:
             await message.reply_video_note(FSInputFile(output_path))
         except Exception:
             logger.exception("Failed to send video note for %s", file_id)
-            await status.edit_text("❌ Видео сконвертировано, но не отправилось.")
+            await _safe_edit(status, "❌ Видео сконвертировано, но не отправилось.")
             return
 
-        await status.delete()
+        await _safe_delete(status)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
 
