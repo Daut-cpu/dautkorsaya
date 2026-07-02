@@ -77,7 +77,8 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     await message.answer(
         "Привет! Выбери, что нужно сделать:\n\n"
         f"{BTN_VIDEO_NOTE} — превратить видео в кружочек\n"
-        f"{BTN_DOWNLOAD_LINK} — скачать видео по ссылке из Instagram или Facebook",
+        f"{BTN_DOWNLOAD_LINK} — скачать видео по ссылке "
+        "(Instagram, Facebook, YouTube, TikTok)",
         reply_markup=main_menu(),
     )
 
@@ -95,7 +96,7 @@ async def prompt_video_note(message: Message, state: FSMContext) -> None:
 async def prompt_download_link(message: Message, state: FSMContext) -> None:
     await state.set_state(DownloadLink.waiting_for_url)
     await message.answer(
-        "Пришли ссылку на видео из Instagram или Facebook.",
+        "Пришли ссылку на видео из Instagram, Facebook, YouTube или TikTok.",
         reply_markup=cancel_menu(),
     )
 
@@ -136,7 +137,7 @@ async def handle_link(message: Message, state: FSMContext) -> None:
     url = normalize_url(message.text)
     if not is_supported_link(url):
         await message.reply(
-            "Это не похоже на ссылку из Instagram или Facebook. "
+            "Это не похоже на ссылку из Instagram, Facebook, YouTube или TikTok. "
             "Пришли корректную ссылку или нажми «Отмена»."
         )
         return

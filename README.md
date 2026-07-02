@@ -10,8 +10,9 @@ video note (кружочка).
 * **🔵 Видео в кружок** — принимает видео (`video`) и видеофайлы, отправленные
   как документ (`document`), конвертирует через FFmpeg в квадрат 480×480 с
   обрезкой по центру и отправляет результат через `sendVideoNote`
-* **⬇️ Скачать по ссылке** — скачивает видео по ссылке на Instagram или
-  Facebook (через `yt-dlp`) и присылает его обратно обычным видео
+* **⬇️ Скачать по ссылке** — скачивает видео по ссылке на Instagram,
+  Facebook, YouTube или TikTok (через `yt-dlp`) и присылает его обратно
+  обычным видео
 
 Общее:
 
@@ -59,8 +60,10 @@ docker run --rm --env-file .env -v "$(pwd)/cookies.txt:/app/cookies.txt:ro" vide
 
 Многие посты Instagram (и часть видео Facebook) отдаются только залогиненным
 пользователям — анонимный запрос `yt-dlp` в этом случае падает с ошибкой
-вида `Instagram sent an empty media response`. Чтобы это обойти, можно
-передать `yt-dlp` куки авторизованной сессии:
+вида `Instagram sent an empty media response`. YouTube и TikTok обычно
+скачивают публичные видео без авторизации, но YouTube иногда требует куки
+для возрастных ограничений или при подозрении на бота. Чтобы это обойти,
+можно передать `yt-dlp` куки авторизованной сессии:
 
 1. Установи в браузер расширение для экспорта cookies в формате Netscape,
    например «Get cookies.txt LOCALLY» (Chrome/Firefox).
@@ -93,7 +96,7 @@ python3 check_cookies.py cookies.txt
 * `config.py` — конфигурация (токен, лимиты)
 * `handlers.py` — обработчики сообщений и меню (FSM-переходы, скачивание, конвертация, отправка)
 * `converter.py` — обёртка над FFmpeg (crop + scale в квадрат)
-* `downloader.py` — обёртка над `yt-dlp` для скачивания видео по ссылке (Instagram/Facebook)
+* `downloader.py` — обёртка над `yt-dlp` для скачивания видео по ссылке (Instagram/Facebook/YouTube/TikTok)
 * `keyboards.py` — reply-клавиатуры (главное меню, отмена)
 * `states.py` — состояния FSM для сценария «скачать по ссылке»
 * `Dockerfile` — образ с Python и FFmpeg для деплоя без ручной установки зависимостей

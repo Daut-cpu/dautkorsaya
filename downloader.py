@@ -18,6 +18,9 @@ SUPPORTED_HOSTS = (
     "instagr.am",
     "facebook.com",
     "fb.watch",
+    "youtube.com",
+    "youtu.be",
+    "tiktok.com",
 )
 
 _URL_HOST_RE = re.compile(r"^https?://([^/]+)/?", re.IGNORECASE)
