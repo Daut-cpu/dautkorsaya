@@ -23,3 +23,8 @@ YTDLP_MAX_HEIGHT = 720
 YTDLP_SOCKET_TIMEOUT_SECONDS = 20
 YTDLP_RETRIES = 3
 DOWNLOAD_TIMEOUT_SECONDS = 180
+
+# Optional Netscape-format cookies file (see README) used to authenticate
+# yt-dlp requests when a post requires a logged-in session. Only used if the
+# file actually exists.
+YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "cookies.txt")
