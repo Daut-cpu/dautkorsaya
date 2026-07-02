@@ -4,7 +4,12 @@ import re
 
 import yt_dlp
 
-from config import MAX_UPLOAD_SIZE_BYTES
+from config import (
+    MAX_UPLOAD_SIZE_BYTES,
+    YTDLP_MAX_HEIGHT,
+    YTDLP_RETRIES,
+    YTDLP_SOCKET_TIMEOUT_SECONDS,
+)
 
 SUPPORTED_HOSTS = (
     "instagram.com",
@@ -33,12 +38,21 @@ def is_supported_link(url: str) -> bool:
 
 
 def _download(url: str, work_dir: str) -> str:
+    height = YTDLP_MAX_HEIGHT
     ydl_opts = {
         "outtmpl": os.path.join(work_dir, "%(id)s.%(ext)s"),
-        "format": "mp4/bestvideo+bestaudio/best",
+        "format": (
+            f"best[height<={height}][ext=mp4]/"
+            f"bestvideo[height<={height}]+bestaudio/"
+            f"best[height<={height}]/best"
+        ),
         "merge_output_format": "mp4",
         "noplaylist": True,
         "max_filesize": MAX_UPLOAD_SIZE_BYTES,
+        "socket_timeout": YTDLP_SOCKET_TIMEOUT_SECONDS,
+        "retries": YTDLP_RETRIES,
+        "fragment_retries": YTDLP_RETRIES,
+        "concurrent_fragment_downloads": 4,
         "quiet": True,
         "no_warnings": True,
     }

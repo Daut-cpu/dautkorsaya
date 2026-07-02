@@ -1,7 +1,9 @@
+import asyncio
 import logging
 import os
 import shutil
 import tempfile
+import time
 import uuid
 
 from aiogram import Bot, F, Router
@@ -9,7 +11,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import FSInputFile, Message
 
-from config import MAX_DOWNLOAD_SIZE_BYTES
+from config import DOWNLOAD_TIMEOUT_SECONDS, MAX_DOWNLOAD_SIZE_BYTES
 from converter import ConversionError, convert_to_video_note, ffmpeg_available
 from downloader import DownloadError, download_video, is_supported_link
 from keyboards import BTN_CANCEL, BTN_DOWNLOAD_LINK, BTN_VIDEO_NOTE, cancel_menu, main_menu
@@ -55,6 +57,24 @@ async def cancel_action(message: Message, state: FSMContext) -> None:
     await message.answer("Отменено.", reply_markup=main_menu())
 
 
+async def _download_with_progress(url: str, work_dir: str, status: Message) -> str:
+    task = asyncio.ensure_future(download_video(url, work_dir))
+    started = time.monotonic()
+
+    while True:
+        try:
+            return await asyncio.wait_for(asyncio.shield(task), timeout=7)
+        except asyncio.TimeoutError:
+            elapsed = int(time.monotonic() - started)
+            if elapsed >= DOWNLOAD_TIMEOUT_SECONDS:
+                task.cancel()
+                raise DownloadError("download timed out")
+            try:
+                await status.edit_text(f"⏳ Скачиваю видео по ссылке... ({elapsed}с)")
+            except Exception:
+                pass
+
+
 @router.message(DownloadLink.waiting_for_url, F.text)
 async def handle_link(message: Message, state: FSMContext) -> None:
     url = message.text.strip()
@@ -71,7 +91,7 @@ async def handle_link(message: Message, state: FSMContext) -> None:
     work_dir = tempfile.mkdtemp(prefix="linkdownload_")
     try:
         try:
-            video_path = await download_video(url, work_dir)
+            video_path = await _download_with_progress(url, work_dir, status)
         except DownloadError:
             logger.exception("Failed to download video from %s", url)
             await status.edit_text("❌ Не удалось скачать видео по этой ссылке.")
